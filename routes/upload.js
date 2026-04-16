@@ -58,12 +58,4 @@ router.post('/photo', upload.single('photo'), async (req, res) => {
 });
 
 module.exports = router;
-    res.status(500).json({
-      success: false,
-      message: 'Error uploading photo',
-      error: error.message,
-    });
-  }
-});
-
-module.exports = router;
+    
