@@ -18,7 +18,7 @@ router.post('/register', async (req, res) => {
     const userRole = role || 'warga';
 
     // Check if email already exists
-    const existingUser = get('SELECT id FROM users WHERE email = ?', [email]);
+    const existingUser = await get('SELECT id FROM users WHERE email = ?', [email]);
 
     if (existingUser) {
       return res.status(409).json({
@@ -28,7 +28,7 @@ router.post('/register', async (req, res) => {
     }
 
     // Insert new user
-    const result = run(
+    const result = await run(
       'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
       [name, email, password, userRole]
     );
@@ -37,7 +37,7 @@ router.post('/register', async (req, res) => {
       success: true,
       message: 'User registered successfully',
       user: {
-        id: result.lastInsertRowid,
+        id: result.insertId,
         name,
         email,
         role: userRole,
@@ -66,7 +66,7 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    const user = get(
+    const user = await get(
       'SELECT id, name, email, password, role FROM users WHERE email = ?',
       [email]
     );
@@ -78,7 +78,7 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // Check password
+    // Check password (in production, use bcrypt!)
     if (user.password !== password) {
       return res.status(401).json({
         success: false,

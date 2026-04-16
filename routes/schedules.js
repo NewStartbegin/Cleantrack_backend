@@ -5,7 +5,7 @@ const { get, all, run } = require('../db');
 // Get all schedules with report details
 router.get('/', async (req, res) => {
   try {
-    const schedules = all(`
+    const schedules = await all(`
       SELECT s.*, r.title as report_title, r.location_address,
              u.name as created_by_name
       FROM schedules s
@@ -33,7 +33,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const schedule = get(`
+    const schedule = await get(`
       SELECT s.*, r.title as report_title, r.location_address,
              r.latitude, r.longitude, r.photo_url,
              u.name as created_by_name
@@ -77,7 +77,7 @@ router.post('/', async (req, res) => {
     }
 
     // Check if report exists
-    const report = get('SELECT id FROM reports WHERE id = ?', [report_id]);
+    const report = await get('SELECT id FROM reports WHERE id = ?', [report_id]);
     if (!report) {
       return res.status(404).json({
         success: false,
@@ -86,7 +86,7 @@ router.post('/', async (req, res) => {
     }
 
     // Check if user exists and is petugas
-    const user = get('SELECT id, role FROM users WHERE id = ?', [created_by]);
+    const user = await get('SELECT id, role FROM users WHERE id = ?', [created_by]);
     if (!user || user.role !== 'petugas') {
       return res.status(403).json({
         success: false,
@@ -94,7 +94,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const result = run(
+    const result = await run(
       `INSERT INTO schedules (report_id, scheduled_date, scheduled_time, notes, created_by)
        VALUES (?, ?, ?, ?, ?)`,
       [report_id, scheduled_date, scheduled_time, notes || null, created_by]
@@ -104,7 +104,7 @@ router.post('/', async (req, res) => {
       success: true,
       message: 'Schedule created successfully',
       data: {
-        id: result.lastInsertRowid,
+        id: result.insertId,
         report_id,
         scheduled_date,
         scheduled_time,
@@ -144,7 +144,7 @@ router.put('/:id/status', async (req, res) => {
       });
     }
 
-    const schedule = get('SELECT id FROM schedules WHERE id = ?', [id]);
+    const schedule = await get('SELECT id FROM schedules WHERE id = ?', [id]);
     if (!schedule) {
       return res.status(404).json({
         success: false,
@@ -152,7 +152,7 @@ router.put('/:id/status', async (req, res) => {
       });
     }
 
-    run('UPDATE schedules SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
+    await run('UPDATE schedules SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
       status,
       id,
     ]);
@@ -181,7 +181,7 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { scheduled_date, scheduled_time, notes } = req.body;
 
-    const schedule = get('SELECT id FROM schedules WHERE id = ?', [id]);
+    const schedule = await get('SELECT id FROM schedules WHERE id = ?', [id]);
     if (!schedule) {
       return res.status(404).json({
         success: false,
@@ -189,7 +189,7 @@ router.put('/:id', async (req, res) => {
       });
     }
 
-    run(
+    await run(
       `UPDATE schedules 
        SET scheduled_date = ?, scheduled_time = ?, notes = ?, updated_at = CURRENT_TIMESTAMP 
        WHERE id = ?`,
@@ -229,7 +229,7 @@ router.put('/:id/confirm', async (req, res) => {
       });
     }
 
-    const schedule = get('SELECT id, report_id FROM schedules WHERE id = ?', [id]);
+    const schedule = await get('SELECT id, report_id FROM schedules WHERE id = ?', [id]);
     if (!schedule) {
       return res.status(404).json({
         success: false,
@@ -238,13 +238,13 @@ router.put('/:id/confirm', async (req, res) => {
     }
 
     // Update schedule status to selesai
-    run('UPDATE schedules SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
+    await run('UPDATE schedules SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
       'selesai',
       id,
     ]);
 
     // Update report status to selesai
-    run('UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
+    await run('UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
       'selesai',
       schedule.report_id,
     ]);
@@ -282,7 +282,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Check if user exists and is petugas
-    const user = get('SELECT id, role FROM users WHERE id = ?', [user_id]);
+    const user = await get('SELECT id, role FROM users WHERE id = ?', [user_id]);
     if (!user || user.role !== 'petugas') {
       return res.status(403).json({
         success: false,
@@ -291,7 +291,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Check if schedule exists
-    const schedule = get('SELECT id FROM schedules WHERE id = ?', [id]);
+    const schedule = await get('SELECT id FROM schedules WHERE id = ?', [id]);
     if (!schedule) {
       return res.status(404).json({
         success: false,
@@ -300,7 +300,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Delete schedule
-    run('DELETE FROM schedules WHERE id = ?', [id]);
+    await run('DELETE FROM schedules WHERE id = ?', [id]);
 
     res.status(200).json({
       success: true,

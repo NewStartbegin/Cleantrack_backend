@@ -51,6 +51,24 @@ app.use((err, req, res, next) => {
 });
 
 // Initialize database and start server
+async function start() {
+  try {
+    await initializeDatabase();
+    app.listen(PORT, () => {
+      console.log(`✓ Server running on http://localhost:${PORT}`);
+      console.log(`✓ Frontend URL: ${process.env.FRONTEND_URL}`);
+      console.log(`✓ Database: MySQL (${process.env.DB_NAME})`);
+      console.log(`✓ S3 Bucket: ${process.env.S3_BUCKET_NAME}`);
+    });
+  } catch (error) {
+    console.error('✗ Failed to start server:', error.message);
+    process.exit(1);
+  }
+}
+
+start();
+
+// Initialize database and start server
 try {
   initializeDatabase();
   app.listen(PORT, () => {

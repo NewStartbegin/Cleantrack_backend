@@ -1,87 +1,68 @@
 require('dotenv').config();
-const Database = require('better-sqlite3');
-const path = require('path');
+const mysql = require('mysql2/promise');
 
-const dbPath = path.join(__dirname, 'cleantrack.db');
-const db = new Database(dbPath);
+// Create connection pool
+const pool = mysql.createPool({
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 3306,
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'cleantrack',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
 
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
-
-function initializeDatabase() {
+async function initializeDatabase() {
   try {
-    // Create users table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        role TEXT DEFAULT 'warga' CHECK(role IN ('warga', 'petugas')),
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Create reports table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS reports (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        title TEXT NOT NULL,
-        description TEXT,
-        location_address TEXT,
-        latitude REAL NOT NULL,
-        longitude REAL NOT NULL,
-        photo_url TEXT,
-        status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'diproses', 'selesai')),
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
-    `);
-
-    // Create schedules table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS schedules (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        report_id INTEGER NOT NULL,
-        scheduled_date DATE NOT NULL,
-        scheduled_time TIME NOT NULL,
-        status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'selesai')),
-        notes TEXT,
-        created_by INTEGER NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
-        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
-      )
-    `);
-
-    console.log('✓ Database initialized successfully');
+    const connection = await pool.getConnection();
+    console.log('✓ Connected to MySQL database');
+    connection.release();
   } catch (error) {
-    console.error('✗ Error initializing database:', error.message);
+    console.error('✗ Error connecting to database:', error.message);
     throw error;
   }
 }
 
-// Helper functions
-function run(sql, params = []) {
-  const stmt = db.prepare(sql);
-  return stmt.run(...params);
+// Helper functions for async queries
+async function run(sql, params = []) {
+  try {
+    const connection = await pool.getConnection();
+    const [result] = await connection.execute(sql, params);
+    connection.release();
+    return result;
+  } catch (error) {
+    console.error('Query error:', error.message);
+    throw error;
+  }
 }
 
-function get(sql, params = []) {
-  const stmt = db.prepare(sql);
-  return stmt.get(...params);
+async function get(sql, params = []) {
+  try {
+    const connection = await pool.getConnection();
+    const [rows] = await connection.execute(sql, params);
+    connection.release();
+    return rows[0] || null;
+  } catch (error) {
+    console.error('Query error:', error.message);
+    throw error;
+  }
 }
 
-function all(sql, params = []) {
-  const stmt = db.prepare(sql);
-  return stmt.all(...params);
+async function all(sql, params = []) {
+  try {
+    const connection = await pool.getConnection();
+    const [rows] = await connection.execute(sql, params);
+    connection.release();
+    return rows || [];
+  } catch (error) {
+    console.error('Query error:', error.message);
+    throw error;
+  }
 }
 
 module.exports = {
-  db,
+  pool,
   run,
   get,
   all,

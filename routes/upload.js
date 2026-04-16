@@ -2,8 +2,9 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const { uploadToS3 } = require('../s3');
 
-// Configure multer for file uploads
+// Configure multer for temporary file storage
 const upload = multer({
   storage: multer.diskStorage({
     destination: function (req, file, cb) {
@@ -26,7 +27,7 @@ const upload = multer({
   },
 });
 
-// Upload photo (local storage for testing, not S3)
+// Upload photo to S3
 router.post('/photo', upload.single('photo'), async (req, res) => {
   try {
     if (!req.file) {
@@ -36,18 +37,27 @@ router.post('/photo', upload.single('photo'), async (req, res) => {
       });
     }
 
-    // Return local file URL
-    const photoUrl = `http://localhost:3000/uploads/${req.file.filename}`;
+    // Upload to S3
+    const s3Url = await uploadToS3(req.file, 'reports');
 
     res.status(200).json({
       success: true,
-      message: 'Photo uploaded successfully',
+      message: 'Photo uploaded to S3 successfully',
       data: {
-        url: photoUrl,
+        url: s3Url,
       },
     });
   } catch (error) {
     console.error('Upload error:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Error uploading photo',
+      error: error.message,
+    });
+  }
+});
+
+module.exports = router;
     res.status(500).json({
       success: false,
       message: 'Error uploading photo',

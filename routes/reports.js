@@ -9,16 +9,16 @@ router.get('/', async (req, res) => {
 
     let reports;
     if (status) {
-      reports = all('SELECT * FROM reports WHERE status = ? ORDER BY created_at DESC', [status]);
+      reports = await all('SELECT * FROM reports WHERE status = ? ORDER BY created_at DESC', [status]);
     } else {
-      reports = all('SELECT * FROM reports ORDER BY created_at DESC');
+      reports = await all('SELECT * FROM reports ORDER BY created_at DESC');
     }
 
-    // Enrich reports with schedule info and auto-update status if needed
+    // Enrich reports with schedule info
     const today = new Date().toISOString().split('T')[0];
     
-    reports = reports.map((report) => {
-      const schedule = get(`
+    for (let report of reports) {
+      const schedule = await get(`
         SELECT id, scheduled_date, scheduled_time, status as schedule_status, notes
         FROM schedules
         WHERE report_id = ?
@@ -28,18 +28,14 @@ router.get('/', async (req, res) => {
 
       // Auto-update report status berdasarkan schedule
       if (schedule) {
-        if (schedule.schedule_status === 'selesai') {
-          // Jika schedule sudah selesai, report harus selesai
-          if (report.status !== 'selesai') {
-            run('UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
-              'selesai',
-              report.id,
-            ]);
-            report.status = 'selesai';
-          }
+        if (schedule.schedule_status === 'selesai' && report.status !== 'selesai') {
+          await run('UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
+            'selesai',
+            report.id,
+          ]);
+          report.status = 'selesai';
         } else if (schedule.scheduled_date === today && report.status === 'pending') {
-          // Jika jadwal hari ini dan status masih pending, ubah ke diproses
-          run('UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
+          await run('UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
             'diproses',
             report.id,
           ]);
@@ -47,11 +43,8 @@ router.get('/', async (req, res) => {
         }
       }
 
-      return {
-        ...report,
-        schedule: schedule || null,
-      };
-    });
+      report.schedule = schedule || null;
+    }
 
     res.status(200).json({
       success: true,
@@ -72,7 +65,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const report = get('SELECT * FROM reports WHERE id = ?', [id]);
+    const report = await get('SELECT * FROM reports WHERE id = ?', [id]);
 
     if (!report) {
       return res.status(404).json({
@@ -82,7 +75,7 @@ router.get('/:id', async (req, res) => {
     }
 
     // Get related schedule if exists
-    const schedule = get(`
+    const schedule = await get(`
       SELECT id, scheduled_date, scheduled_time, status as schedule_status, notes
       FROM schedules
       WHERE report_id = ?
@@ -95,18 +88,14 @@ router.get('/:id', async (req, res) => {
       const today = new Date().toISOString().split('T')[0];
       const scheduledDate = schedule.scheduled_date;
 
-      if (schedule.schedule_status === 'selesai') {
-        // Jika schedule sudah selesai, report harus selesai
-        if (report.status !== 'selesai') {
-          run('UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
-            'selesai',
-            id,
-          ]);
-          report.status = 'selesai';
-        }
+      if (schedule.schedule_status === 'selesai' && report.status !== 'selesai') {
+        await run('UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
+          'selesai',
+          id,
+        ]);
+        report.status = 'selesai';
       } else if (scheduledDate === today && report.status === 'pending') {
-        // Jika jadwal hari ini dan status masih pending, ubah ke diproses
-        run('UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
+        await run('UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
           'diproses',
           id,
         ]);
@@ -145,7 +134,7 @@ router.post('/', async (req, res) => {
     }
 
     // Check if user exists
-    const user = get('SELECT id FROM users WHERE id = ?', [user_id]);
+    const user = await get('SELECT id FROM users WHERE id = ?', [user_id]);
 
     if (!user) {
       return res.status(404).json({
@@ -155,7 +144,7 @@ router.post('/', async (req, res) => {
     }
 
     // Insert report
-    const result = run(
+    const result = await run(
       'INSERT INTO reports (user_id, title, description, location_address, latitude, longitude, photo_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [user_id, title, description || null, location_address || null, latitude, longitude, photo_url || null]
     );
@@ -164,7 +153,7 @@ router.post('/', async (req, res) => {
       success: true,
       message: 'Report created successfully',
       data: {
-        id: result.lastInsertRowid,
+        id: result.insertId,
         user_id,
         title,
         description,
@@ -207,7 +196,7 @@ router.put('/:id/status', async (req, res) => {
     }
 
     // Check if report exists
-    const report = get('SELECT id FROM reports WHERE id = ?', [id]);
+    const report = await get('SELECT id FROM reports WHERE id = ?', [id]);
 
     if (!report) {
       return res.status(404).json({
@@ -217,7 +206,7 @@ router.put('/:id/status', async (req, res) => {
     }
 
     // Update status
-    run('UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
+    await run('UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
       status,
       id,
     ]);
@@ -254,7 +243,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Check if user exists and is petugas
-    const user = get('SELECT id, role FROM users WHERE id = ?', [user_id]);
+    const user = await get('SELECT id, role FROM users WHERE id = ?', [user_id]);
     if (!user || user.role !== 'petugas') {
       return res.status(403).json({
         success: false,
@@ -263,7 +252,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Check if report exists
-    const report = get('SELECT id FROM reports WHERE id = ?', [id]);
+    const report = await get('SELECT id FROM reports WHERE id = ?', [id]);
 
     if (!report) {
       return res.status(404).json({
@@ -273,10 +262,10 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Delete related schedules first
-    run('DELETE FROM schedules WHERE report_id = ?', [id]);
+    await run('DELETE FROM schedules WHERE report_id = ?', [id]);
 
     // Delete report
-    run('DELETE FROM reports WHERE id = ?', [id]);
+    await run('DELETE FROM reports WHERE id = ?', [id]);
 
     res.status(200).json({
       success: true,
