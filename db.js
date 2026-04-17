@@ -19,21 +19,32 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
-// Initialize database
-async function initializeDatabase() {
-  try {
-    const connection = await pool.getConnection();
+async function initializeDatabase(maxRetries = 5) {
+  let attempt = 0;
 
-    console.log('✅ Connected to MySQL database');
-    console.log('📍 Host:', process.env.DB_HOST);
-    console.log('📦 Database:', process.env.DB_NAME);
+  while (attempt < maxRetries) {
+    try {
+      const connection = await pool.getConnection();
 
-    connection.release();
-  } catch (error) {
-    console.error('❌ Error connecting to database:', error.message);
-    process.exit(1);
+      console.log('✅ Connected to MySQL database');
+
+      connection.release();
+      return; // sukses → keluar fungsi
+
+    } catch (error) {
+      attempt++;
+      console.error(`❌ DB connection failed (attempt ${attempt}):`, error.message);
+
+      if (attempt < maxRetries) {
+        console.log('🔄 Retry 5 detik...');
+        await new Promise(res => setTimeout(res, 5000));
+      } else {
+        console.error('⚠️ DB tidak bisa diakses, tapi server tetap jalan');
+      }
+    }
   }
 }
+
 
 // Helper: run (INSERT/UPDATE/DELETE)
 async function run(sql, params = []) {
